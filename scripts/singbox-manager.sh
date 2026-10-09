@@ -2,7 +2,7 @@
 # Alpine/OpenRC manager for one sing-box process with multiple server inbounds.
 set -eu
 
-VERSION=1.0.1
+VERSION=1.0.2
 SB_VERSION=1.14.2
 REPO=Catbully/sing-box-alpine-nat
 BIN=/usr/local/bin/sing-box
@@ -332,32 +332,35 @@ rotate_credentials() {
     apply_candidate "$candidate" || die '凭据轮换未应用，已恢复原配置。'
     rm -f "$candidate"
     say '请立即将旧节点从客户端替换为新导出内容：'
-    export_node <<EOF
-$name
-EOF
+    export_node "$name"
     rm -rf -- "$SECURE_DIR"; SECURE_DIR=
 }
 
 export_node() {
     need_root; ensure_layout
     node_summary
-    printf '输入要导出的节点名称：'; IFS= read -r name
+    if [ "$#" -gt 0 ]; then name=$1; else printf '输入要导出的节点名称：'; IFS= read -r name; fi
     node=$(jq -ce --arg n "$name" '.inbounds[] | select(.tag == $n)' "$CONFIG") || die '找不到该节点。'
     type=$(printf '%s' "$node" | jq -r .type)
-    say '将服务器地址和外部端口替换为你在 NAT 面板配置的值。导出内容含敏感凭据，不要提交到仓库。'
+    printf '服务器地址（IP 或域名）：'; IFS= read -r server
+    [ -n "$server" ] || die '服务器地址不能为空。'
+    printf 'NAT 外部端口（映射到该节点内部端口）：'; IFS= read -r external_port
+    printf '%s' "$external_port" | grep -Eq '^[0-9]{1,5}$' || die '外部端口格式无效。'
+    [ "$external_port" -ge 1 ] && [ "$external_port" -le 65535 ] || die '外部端口超出范围。'
+    say '导出内容含敏感凭据，请妥善保存，不要提交到仓库。'
     case "$type" in
         shadowsocks)
-            printf '%s\n' "$node" | jq -r '"proxies:\n  - name: \"\(.tag)\"\n    type: ss\n    server: YOUR_SERVER_ADDRESS\n    port: YOUR_EXTERNAL_PORT\n    cipher: \(.method)\n    password: \"\(.password)\"\n    udp: false"'
+            printf '%s\n' "$node" | jq -r --arg server "$server" --argjson port "$external_port" '"proxies:\n  - name: \(.tag|tojson)\n    type: ss\n    server: \($server|tojson)\n    port: \($port)\n    cipher: \(.method|tojson)\n    password: \(.password|tojson)\n    udp: false"'
             ;;
         vless)
             private=$(printf '%s\n' "$node" | jq -r '.tls.reality.private_key')
             public=$(reality_public_key "$private") || die '无法从 Reality 私钥导出公钥。'
-            printf '%s\n' "$node" | jq -r --arg pk "$public" '"proxies:\n  - name: \"\(.tag)\"\n    type: vless\n    server: YOUR_SERVER_ADDRESS\n    port: YOUR_EXTERNAL_PORT\n    uuid: \(.users[0].uuid)\n    network: tcp\n    tls: true\n    servername: \(.tls.server_name)\n    client-fingerprint: chrome\n    flow: \(.users[0].flow)\n    reality-opts:\n      public-key: \($pk)\n      short-id: \(.tls.reality.short_id[0])"'
+            printf '%s\n' "$node" | jq -r --arg server "$server" --argjson port "$external_port" --arg pk "$public" '"proxies:\n  - name: \(.tag|tojson)\n    type: vless\n    server: \($server|tojson)\n    port: \($port)\n    uuid: \(.users[0].uuid|tojson)\n    network: tcp\n    tls: true\n    servername: \(.tls.server_name|tojson)\n    client-fingerprint: chrome\n    flow: \(.users[0].flow|tojson)\n    reality-opts:\n      public-key: \($pk|tojson)\n      short-id: \(.tls.reality.short_id[0]|tojson)"'
             ;;
         hysteria2)
             cert=$(printf '%s\n' "$node" | jq -r '.tls.certificate_path')
             fingerprint=$(openssl x509 -noout -fingerprint -sha256 -in "$cert" | sed 's/^[^=]*=//')
-            printf '%s\n' "$node" | jq -r --arg fp "$fingerprint" '"proxies:\n  - name: \"\(.tag)\"\n    type: hysteria2\n    server: YOUR_SERVER_ADDRESS\n    port: YOUR_EXTERNAL_PORT\n    password: \"\(.users[0].password)\"\n    sni: \(.tls.server_name)\n    skip-cert-verify: false\n    fingerprint: \($fp)"'
+            printf '%s\n' "$node" | jq -r --arg server "$server" --argjson port "$external_port" --arg fp "$fingerprint" '"proxies:\n  - name: \(.tag|tojson)\n    type: hysteria2\n    server: \($server|tojson)\n    port: \($port)\n    password: \(.users[0].password|tojson)\n    sni: \(.tls.server_name|tojson)\n    skip-cert-verify: false\n    fingerprint: \($fp|tojson)"'
             ;;
         *) die '自定义节点没有可识别的客户端导出格式。' ;;
     esac
