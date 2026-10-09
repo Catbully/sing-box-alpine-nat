@@ -112,10 +112,12 @@ jobs:
           cp "$GITHUB_WORKSPACE/scripts/singbox-manager.sh" "$GITHUB_WORKSPACE/dist/singbox-manager.sh"
           cp "$GITHUB_WORKSPACE/scripts/install.sh" "$GITHUB_WORKSPACE/dist/install.sh"
           cp "$GITHUB_WORKSPACE/scripts/sing-box.initd" "$GITHUB_WORKSPACE/dist/sing-box.initd"
+          cp "$GITHUB_WORKSPACE/scripts/export-ss2022-client.sh" "$GITHUB_WORKSPACE/dist/export-ss2022-client.sh"
           cp "$GITHUB_WORKSPACE/LICENSE" "$GITHUB_WORKSPACE/dist/PROJECT-LICENSE"
           chmod 0755 "$GITHUB_WORKSPACE/dist/singbox-manager.sh" "$GITHUB_WORKSPACE/dist/install.sh" "$GITHUB_WORKSPACE/dist/sing-box.initd"
+          chmod 0755 "$GITHUB_WORKSPACE/dist/export-ss2022-client.sh"
           archive="sing-box-v${version}-linux-${{ matrix.name }}.tar.gz"
-          tar -C "$GITHUB_WORKSPACE/dist" -czf "$GITHUB_WORKSPACE/dist/$archive" sing-box singbox-manager.sh install.sh sing-box.initd SING-BOX-LICENSE PROJECT-LICENSE
+          tar -C "$GITHUB_WORKSPACE/dist" -czf "$GITHUB_WORKSPACE/dist/$archive" sing-box singbox-manager.sh install.sh sing-box.initd export-ss2022-client.sh SING-BOX-LICENSE PROJECT-LICENSE
           (cd "$GITHUB_WORKSPACE/dist" && sha256sum "$archive" > "$archive.sha256")
       - name: Upload architecture artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

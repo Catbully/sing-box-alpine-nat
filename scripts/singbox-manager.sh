@@ -2,7 +2,7 @@
 # Alpine/OpenRC manager for one sing-box process with multiple server inbounds.
 set -eu
 
-VERSION=1.0.2
+VERSION=1.0.3
 SB_VERSION=1.14.2
 REPO=Catbully/sing-box-alpine-nat
 BIN=/usr/local/bin/sing-box

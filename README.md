@@ -21,6 +21,12 @@
 ```
 菜单 5 可交互导出客户端配置：选择节点后输入服务器地址与 NAT 外部映射端口，脚本从本机配置读取凭据并生成可复制的 YAML。
 
+也可在 VPS 上运行以下一键命令，单独交互导出 SS2022 客户端 YAML：
+
+```sh
+tmp="$(mktemp)" && curl -fsSL https://raw.githubusercontent.com/Catbully/sing-box-alpine-nat/v1.0.3/scripts/export-ss2022-client.sh -o "$tmp" && sh "$tmp"; rc=$?; rm -f "$tmp"; exit "$rc"
+```
+
 OpenRC 环境不可用时安装停止。新建节点前菜单会显示可读到的 cgroup 内存限制；读不到时不会把宿主机内存当成容器限额。NAT 的端口转发由用户在服务商面板设置；Hysteria2 必须配置 UDP 映射。
 
 凭据、配置和私钥仅保存在本机受限权限目录。不要提交真实配置、凭据或证书。公开仓库与 Release 不包含用户密钥。
