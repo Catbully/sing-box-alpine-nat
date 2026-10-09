@@ -2,7 +2,7 @@
 set -eu
 
 REPO=Catbully/sing-box-alpine-nat
-PROJECT_VERSION=${SINGBOX_RELEASE_TAG:-v1.0.0}
+PROJECT_VERSION=${SINGBOX_RELEASE_TAG:-v1.0.1}
 SB_VERSION=1.14.2
 PREFIX=/usr/local
 CONFIG_DIR=/etc/sing-box

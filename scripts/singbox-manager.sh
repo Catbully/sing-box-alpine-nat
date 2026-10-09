@@ -2,7 +2,7 @@
 # Alpine/OpenRC manager for one sing-box process with multiple server inbounds.
 set -eu
 
-VERSION=1.0.0
+VERSION=1.0.1
 SB_VERSION=1.14.2
 REPO=Catbully/sing-box-alpine-nat
 BIN=/usr/local/bin/sing-box
@@ -202,7 +202,7 @@ create_node() {
             secret=$(random_ss_key)
             printf '{"password":"%s"}\n' "$secret" > "$credential_file"
             jq -cn --arg n "$name" --argjson p "$port" --slurpfile c "$credential_file" '{type:"shadowsocks",tag:$n,listen:"0.0.0.0",listen_port:$p,network:"tcp",method:"2022-blake3-chacha20-poly1305",password:$c[0].password}' > "$inbound_file"
-            jq -r --arg n "$name" --slurpfile c "$credential_file" '"proxies:\n  - name: \"\($n)\"\n    type: ss\n    server: YOUR_SERVER_ADDRESS\n    port: YOUR_EXTERNAL_PORT\n    cipher: 2022-blake3-chacha20-poly1305\n    password: \"\($c[0].password)\"\n    udp: false"' > "$client_file"
+            jq -n -r --arg n "$name" --slurpfile c "$credential_file" '"proxies:\n  - name: \"\($n)\"\n    type: ss\n    server: YOUR_SERVER_ADDRESS\n    port: YOUR_EXTERNAL_PORT\n    cipher: 2022-blake3-chacha20-poly1305\n    password: \"\($c[0].password)\"\n    udp: false"' > "$client_file"
             ;;
         vless)
             printf 'Reality 握手目标域名（有效 TLS 站点）：'; IFS= read -r sni

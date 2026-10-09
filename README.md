@@ -26,7 +26,7 @@ OpenRC 环境不可用时安装停止。新建节点前菜单会显示可读到�
 
 ## 构建与发布
 
-推送项目版本 tag `v1.0.0` 启动 Actions。当前上游 sing-box 锁定为 `v1.14.2`；升级上游版本需经代码评审调整版本锁。构建原样读取该上游提交内的 `release/DEFAULT_BUILD_TAGS_OTHERS` 和 `release/LDFLAGS`，`CGO_ENABLED=0`，使用 Go `1.25.5`。所有第三方 Actions 固定到完整 commit SHA。CI 检查架构格式、版本信息、三个协议的配置以及本地 TCP/UDP 监听；Release 只在所有架构构建成功后发布。
+推送项目版本 tag `v1.0.x` 启动 Actions。当前上游 sing-box 锁定为 `v1.14.2`；升级上游版本需经代码评审调整版本锁。构建原样读取该上游提交内的 `release/DEFAULT_BUILD_TAGS_OTHERS` 和 `release/LDFLAGS`，`CGO_ENABLED=0`，使用 Go `1.25.5`。所有第三方 Actions 固定到完整 commit SHA。CI 检查架构格式、版本信息、三个协议的配置以及本地 TCP/UDP 监听；Release 只在所有架构构建成功后发布。
 
 ## 验证范围与限制
 

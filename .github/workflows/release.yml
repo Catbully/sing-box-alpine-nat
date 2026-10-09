@@ -2,7 +2,7 @@ name: Build and release
 
 on:
   push:
-    tags: ["v1.0.0"]
+    tags: ["v1.0.*"]
 
 permissions:
   contents: read
@@ -36,8 +36,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          [[ "$GITHUB_REF_TYPE" == tag && "$GITHUB_REF_NAME" == v1.0.0 ]] || {
-            echo "This workflow only publishes project release v1.0.0." >&2
+          [[ "$GITHUB_REF_TYPE" == tag && "$GITHUB_REF_NAME" =~ ^v1\.0\.[0-9]+$ ]] || {
+            echo "This workflow only publishes v1.0.x project releases." >&2
             exit 1
           }
       - name: Checkout this project
