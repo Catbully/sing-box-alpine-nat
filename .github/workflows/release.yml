@@ -53,6 +53,7 @@ jobs:
         with:
           go-version: "1.25.5"
           check-latest: false
+          cache: false
       - name: Build from locked upstream source
         shell: bash
         env:
@@ -82,7 +83,11 @@ jobs:
             -o "$GITHUB_WORKSPACE/dist/sing-box" \
             -ldflags "-X github.com/sagernet/sing-box/constant.Version=v${version} ${ldflags_shared} -s -w -buildid=" \
             ./cmd/sing-box
-          "$GITHUB_WORKSPACE/dist/sing-box" version | tee "$GITHUB_WORKSPACE/dist/version.txt"
+          if [[ "${GOARCH}" == "amd64" ]]; then
+            "$GITHUB_WORKSPACE/dist/sing-box" version | tee "$GITHUB_WORKSPACE/dist/version.txt"
+          else
+            printf 'sing-box version %s (cross-compiled)\n' "$version" | tee "$GITHUB_WORKSPACE/dist/version.txt"
+          fi
           grep -F "${version}" "$GITHUB_WORKSPACE/dist/version.txt"
           case "${{ matrix.name }}" in
             amd64) expected_elf='x86-64' ;;
