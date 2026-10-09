@@ -1,0 +1,159 @@
+name: Build and release
+
+on:
+  push:
+    tags: ["v1.0.0"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - name: amd64
+            goarch: amd64
+            goarm: ""
+          - name: arm64
+            goarch: arm64
+            goarm: ""
+          - name: 386
+            goarch: "386"
+            goarm: ""
+          - name: armv7
+            goarch: arm
+            goarm: "7"
+    steps:
+      - name: Validate release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF_TYPE" == tag && "$GITHUB_REF_NAME" == v1.0.0 ]] || {
+            echo "This workflow only publishes project release v1.0.0." >&2
+            exit 1
+          }
+      - name: Checkout this project
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Check shell syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh -n scripts/install.sh scripts/singbox-manager.sh scripts/sing-box.initd
+          bash -n scripts/ci-smoke.sh
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: "1.25.5"
+          check-latest: false
+      - name: Build from locked upstream source
+        shell: bash
+        env:
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
+        run: |
+          set -euo pipefail
+          version=1.14.2
+          expected_commit=af6e64c3b69e6132ebaee0e1a3d24e93903f6709
+          work="$RUNNER_TEMP/sing-box"
+          git init "$work"
+          git -C "$work" remote add origin https://github.com/SagerNet/sing-box.git
+          git -C "$work" fetch --depth=1 origin "refs/tags/v${version}:refs/tags/v${version}"
+          git -C "$work" checkout --detach "refs/tags/v${version}"
+          actual_commit="$(git -C "$work" rev-parse HEAD)"
+          [[ "$actual_commit" == "$expected_commit" ]] || {
+            echo "Upstream tag resolved to unexpected commit: $actual_commit" >&2
+            exit 1
+          }
+          printf 'upstream_commit=%s\n' "$actual_commit" >> "$GITHUB_OUTPUT"
+          cd "$work"
+          tags="$(cat release/DEFAULT_BUILD_TAGS_OTHERS)"
+          ldflags_shared="$(cat release/LDFLAGS)"
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          printf '%s\n' "$actual_commit" > "$GITHUB_WORKSPACE/dist/upstream-commit.txt"
+          CGO_ENABLED=0 GOOS=linux go build -v -trimpath -tags "$tags" \
+            -o "$GITHUB_WORKSPACE/dist/sing-box" \
+            -ldflags "-X github.com/sagernet/sing-box/constant.Version=v${version} ${ldflags_shared} -s -w -buildid=" \
+            ./cmd/sing-box
+          "$GITHUB_WORKSPACE/dist/sing-box" version | tee "$GITHUB_WORKSPACE/dist/version.txt"
+          grep -F "${version}" "$GITHUB_WORKSPACE/dist/version.txt"
+          case "${{ matrix.name }}" in
+            amd64) expected_elf='x86-64' ;;
+            arm64) expected_elf='ARM aarch64' ;;
+            386) expected_elf='Intel 80386' ;;
+            armv7) expected_elf='ARM,' ;;
+          esac
+          file "$GITHUB_WORKSPACE/dist/sing-box" | grep -F "$expected_elf"
+          strings "$GITHUB_WORKSPACE/dist/sing-box" | grep -Fx "v${version}"
+          go version -m "$GITHUB_WORKSPACE/dist/sing-box"
+          cp "$work/LICENSE" "$GITHUB_WORKSPACE/dist/SING-BOX-LICENSE"
+      - name: Validate protocol configs and listeners
+        if: matrix.goarch == 'amd64'
+        shell: bash
+        run: bash scripts/ci-smoke.sh "$GITHUB_WORKSPACE/dist/sing-box"
+      - name: Package binary and manager
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=1.14.2
+          actual_commit="$(cat "$GITHUB_WORKSPACE/dist/upstream-commit.txt")"
+          cp "$GITHUB_WORKSPACE/scripts/singbox-manager.sh" "$GITHUB_WORKSPACE/dist/singbox-manager.sh"
+          cp "$GITHUB_WORKSPACE/scripts/install.sh" "$GITHUB_WORKSPACE/dist/install.sh"
+          cp "$GITHUB_WORKSPACE/scripts/sing-box.initd" "$GITHUB_WORKSPACE/dist/sing-box.initd"
+          cp "$GITHUB_WORKSPACE/LICENSE" "$GITHUB_WORKSPACE/dist/PROJECT-LICENSE"
+          chmod 0755 "$GITHUB_WORKSPACE/dist/singbox-manager.sh" "$GITHUB_WORKSPACE/dist/install.sh" "$GITHUB_WORKSPACE/dist/sing-box.initd"
+          archive="sing-box-v${version}-linux-${{ matrix.name }}.tar.gz"
+          tar -C "$GITHUB_WORKSPACE/dist" -czf "$GITHUB_WORKSPACE/dist/$archive" sing-box singbox-manager.sh install.sh sing-box.initd SING-BOX-LICENSE PROJECT-LICENSE
+          (cd "$GITHUB_WORKSPACE/dist" && sha256sum "$archive" > "$archive.sha256")
+      - name: Upload architecture artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-${{ matrix.name }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout project metadata
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Download all architecture assets
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+      - name: Assemble release manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          cat ./*.sha256 > SHA256SUMS
+          {
+            echo "sing-box upstream: v1.14.2"
+            echo "upstream commit: $(cat upstream-commit.txt | head -n1)"
+            echo "Go toolchain: go1.25.5"
+            echo "Build tags: release/DEFAULT_BUILD_TAGS_OTHERS from locked upstream source"
+            echo "Linker flags: release/LDFLAGS from locked upstream source"
+            echo "License: included with the source project and in this repository"
+          } > BUILD-INFO.txt
+      - name: Publish complete release
+        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2.6.1
+        with:
+          name: sing-box Alpine assets ${{ github.ref_name }}
+          fail_on_unmatched_files: true
+          files: |
+            dist/sing-box-v1.14.2-linux-*.tar.gz
+            dist/sing-box-v1.14.2-linux-*.tar.gz.sha256
+            dist/SHA256SUMS
+            dist/BUILD-INFO.txt

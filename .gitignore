@@ -1,0 +1,5 @@
+/dist/
+*.log
+config.json
+*.key
+*.pem

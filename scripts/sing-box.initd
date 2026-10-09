@@ -1,0 +1,24 @@
+#!/sbin/openrc-run
+# managed-by sing-box-alpine-nat
+
+name="sing-box proxy server"
+description="sing-box multi-inbound proxy service"
+command="/usr/local/bin/sing-box"
+command_args="run -c /etc/sing-box/config.json"
+command_background="yes"
+command_user="root:root"
+pidfile="/run/${RC_SVCNAME}.pid"
+output_log="/var/log/sing-box.log"
+error_log="/var/log/sing-box.log"
+retry="TERM/10/KILL/5"
+
+depend() {
+	need net
+	use logger
+}
+
+start_pre() {
+	[ -x "$command" ] || eerror "sing-box binary is missing: $command"
+	[ -r /etc/sing-box/config.json ] || eerror "configuration is missing"
+	"$command" check -c /etc/sing-box/config.json
+}
